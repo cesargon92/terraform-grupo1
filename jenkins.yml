@@ -1,0 +1,66 @@
+---
+
+- name: Instalar jenkins Distribucion Ubuntu
+  hosts: all
+  become: true
+  remote_user: adminuser
+
+  vars:    
+    jenkins:
+      jenkins_home: /home/adminuser/jenkins 
+      jenkins_url: https://get.jenkins.io/war/2.286/jenkins.war
+      jenkins_owner: adminuser   
+      jenkins_group: adminuser 
+      jenkins_port: 8080  
+      jenkins_fileAdmin: /home/adminuser/.jenkins/secrets/initialAdminPassword 
+
+  tasks:
+  #instalación de java  
+    - name: update APT package cache
+      apt: update_cache=yes
+      tags: java
+ 
+    - name: install Java 
+      apt: name=openjdk-11-jdk
+      tags: java
+
+
+   #instalacion de jenkins 
+    - name: crear carpeta
+      file:
+        path: "{{ jenkins.jenkins_home }}"
+        state: directory
+        mode: 0755
+        owner: "{{ jenkins.jenkins_owner }}"
+        group: "{{ jenkins.jenkins_group }}" 
+
+    - name: descargar jenkins
+      get_url: url="{{ jenkins.jenkins_url }}" dest="{{ jenkins.jenkins_home }}" validate_certs=false
+
+
+    - name: arreglar permisos
+      file:
+        path: "{{ jenkins.jenkins_home }}"
+        owner: "{{ jenkins.jenkins_owner }}"
+        group: "{{ jenkins.jenkins_group }}"
+        mode: 0755
+        recurse: yes     
+
+    - name: Start jenkins en el puerto 8080
+      ansible.builtin.shell: nohup java -jar "{{ jenkins.jenkins_home }}"/jenkins.war --httpPort="{{ jenkins.jenkins_port }}" 2>&1 >> /tmp/debug.log &
+      become: true
+      become_method: su
+      become_user: adminuser
+
+    - name: espera creacion de archivo con clave inicial
+      wait_for:
+        path: "{{ jenkins.jenkins_fileAdmin }}"
+
+    - name: obtener clave inicial
+      shell: cat  "{{ jenkins.jenkins_fileAdmin }}"
+      changed_when: false
+      register: result      
+
+    - name: imprimir clave inicial
+      debug:
+        var: result.stdout
